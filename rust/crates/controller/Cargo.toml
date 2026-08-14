@@ -1,0 +1,13 @@
+[package]
+name = "dsh-controller"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Rust local controller for dsh-remote-vps"
+
+[dependencies]
+anyhow = "1.0.98"
+clap = { version = "4.5.40", features = ["derive"] }
+dsh-protocol = { path = "../protocol" }
+tokio = { version = "1.45.1", features = ["macros", "rt-multi-thread"] }
+tonic = { version = "0.12.3", features = ["transport"] }

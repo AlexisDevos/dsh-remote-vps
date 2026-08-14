@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package dsh.remote.v1;
+
+// Stable wire contract between the local controller and a VPS agent.
+// File and command RPCs are added only through backward-compatible changes.
+service RemoteAgent {
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (CapabilitiesResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message GetCapabilitiesRequest {
+  string client_version = 1;
+}
+
+message CapabilitiesResponse {
+  string agent_version = 1;
+  string protocol_version = 2;
+  repeated string features = 3;
+}
+
+message HealthRequest {
+  string request_id = 1;
+}
+
+message HealthResponse {
+  string status = 1;
+  string agent_version = 2;
+  string protocol_version = 3;
+}
