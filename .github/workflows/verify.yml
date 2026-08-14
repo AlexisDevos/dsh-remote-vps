@@ -1,0 +1,60 @@
+name: verify
+
+on:
+  push:
+    branches: [main, feat/rust-agent-foundation]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [fmt, clippy, test, build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.task }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Format
+        if: matrix.task == 'fmt'
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        if: matrix.task == 'clippy'
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Test
+        if: matrix.task == 'test'
+        run: cargo test --workspace --all-features --locked
+      - name: Release build
+        if: matrix.task == 'build'
+        run: cargo build --workspace --release --locked
+
+  javascript:
+    name: JavaScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --ignore-scripts
+      - run: npm run test
+      - run: npm run test:client
+      - run: bash -n scripts/install-agent.sh scripts/install-controller.sh scripts/package-release.sh

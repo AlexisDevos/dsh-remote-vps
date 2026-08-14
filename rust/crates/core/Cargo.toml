@@ -1,0 +1,13 @@
+[package]
+name = "dsh-core"
+version = "0.3.0"
+edition = "2021"
+license = "MIT"
+description = "Shared path and filesystem policy for dsh-remote-vps"
+
+[dependencies]
+dsh-protocol = { path = "../protocol" }
+thiserror = "2.0.12"
+
+[dev-dependencies]
+tempfile = "3.27.0"

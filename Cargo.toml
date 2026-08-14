@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "rust/crates/protocol",
+  "rust/crates/core",
   "rust/crates/agentd",
   "rust/crates/controller",
 ]

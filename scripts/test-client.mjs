@@ -1,7 +1,16 @@
 // Vérifie que le bundle client charge, applique et enregistre la section
 // « VPS distants » dans le slot settings.section — données via le pont HTTP.
 import { readFileSync } from 'node:fs'
-import React from '/Users/alexis/.npm/_npx/1e7f6d9597241db0/node_modules/react/index.js'
+
+// The test only exercises module loading and slot registration. Keeping a
+// minimal React-compatible surface here makes it runnable on CI/VPS hosts
+// without relying on a developer's absolute npm cache path.
+const React = {
+  createElement: () => null,
+  useState: (initial) => [initial, () => {}],
+  useCallback: (fn) => fn,
+  useEffect: () => {},
+}
 
 let def
 global.window = { __ModuleLoader__: { load(d) { def = d } } }

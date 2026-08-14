@@ -17,7 +17,7 @@ import { FileSystem, FsTargetKey, FsVersion, FsError } from '@deepseek-ai/dsh-fs
 import z from '@deepseek-ai/schemastery'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, mkdirSync, chmodSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -209,6 +209,43 @@ const SCHEMA_STATUS = z.object({
   })).default([]),
 })
 
+const MAX_STATE_BODY_BYTES = 256 * 1024
+
+function isLoopbackHostname(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
+function isLocalOrigin(value) {
+  if (!value || value === 'null') return false
+  try {
+    return isLoopbackHostname(new URL(value).hostname)
+  } catch {
+    return false
+  }
+}
+
+function validateStoreInput(connections, active, testTarget) {
+  if (connections.length > 32) throw new Error('trop de connexions (maximum 32)')
+  const ids = new Set()
+  const endpoints = new Set()
+  for (const connection of connections) {
+    if (!connection.id || connection.id.length > 128 || /[\u0000-\u001f]/.test(connection.id)) throw new Error('id de connexion invalide')
+    if (!connection.host || connection.host.length > 255 || /[\s/@\\\u0000]/.test(connection.host)) throw new Error('hôte invalide')
+    if (!connection.user || connection.user.length > 128 || /[\s/@\\\u0000]/.test(connection.user)) throw new Error('utilisateur invalide')
+    if (!Number.isInteger(connection.port) || connection.port < 1 || connection.port > 65535) throw new Error('port invalide')
+    if (connection.keyFile.length > 4096 || connection.keyFile.includes('\u0000')) throw new Error('clé SSH invalide')
+    if (connection.baseDir.length > 4096 || connection.baseDir.includes('\u0000') || (connection.baseDir && !connection.baseDir.startsWith('/'))) throw new Error('baseDir doit être absolu')
+    if (connection.baseDir.split('/').includes('..')) throw new Error('baseDir ne doit pas contenir ..')
+    if (ids.has(connection.id)) throw new Error('id de connexion dupliqué')
+    const endpoint = connection.user + '@' + connection.host + ':' + connection.port
+    if (endpoints.has(endpoint)) throw new Error('hôte et port dupliqués')
+    ids.add(connection.id)
+    endpoints.add(endpoint)
+  }
+  if (active && !ids.has(active)) throw new Error('connexion active inconnue')
+  if (testTarget && !ids.has(testTarget)) throw new Error('cible de test inconnue')
+}
+
 /** SSH multiplexed connection pool, one ControlMaster per connection. */
 class SshPool {
   constructor(defaults, transport) {
@@ -216,6 +253,7 @@ class SshPool {
     this.transport = transport || null
     this.store = null
     this.masters = new Map()
+    this.masterPromises = new Map()
   }
 
   attachStore(store) {
@@ -285,6 +323,7 @@ class SshPool {
       let err = Buffer.alloc(0)
       let settled = false
       let timedOut = false
+      let hardKiller = null
       const OUT_CAP = 8 * 1024 * 1024
       let proc
       try {
@@ -297,7 +336,10 @@ class SshPool {
       if (timeoutMs && timeoutMs > 0) {
         killer = setTimeout(() => {
           timedOut = true
-          try { proc.kill('SIGKILL') } catch (e) {}
+          try { proc.kill('SIGTERM') } catch (e) {}
+          hardKiller = setTimeout(() => {
+            try { proc.kill('SIGKILL') } catch (e) {}
+          }, Math.max(1000, graceMs || 5000))
         }, timeoutMs)
       }
       proc.stdout.on('data', (d) => {
@@ -309,6 +351,7 @@ class SshPool {
         if (settled) return
         settled = true
         if (killer) clearTimeout(killer)
+        if (hardKiller) clearTimeout(hardKiller)
         resolve({ exit, signal: sig, out: binary ? out : out.toString('utf8'), err: err.toString('utf8'), ms: Date.now() - started, timedOut })
       }
       proc.on('error', (e) => finish(-1, null))
@@ -321,8 +364,13 @@ class SshPool {
 
   ensureMaster(conn) {
     const sock = this.sockPath(conn)
+    const existing = this.masterPromises.get(sock)
+    if (existing) return existing
     const args = ['-MNf', '-S', sock, '-o', 'ControlPersist=900', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-o', 'StrictHostKeyChecking=accept-new'].concat(this.connArgs(conn), [conn.user + '@' + conn.host])
-    return this.spawnOnce([SSH].concat(args), undefined, 20000, 20000)
+    const promise = this.spawnOnce([SSH].concat(args), undefined, 20000, 20000)
+      .finally(() => this.masterPromises.delete(sock))
+    this.masterPromises.set(sock, promise)
+    return promise
   }
 
   async exec(conn, remoteArgv, stdinData, opts) {
@@ -335,7 +383,8 @@ class SshPool {
     const base = ['-S', sock, '-T', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15'].concat(this.connArgs(conn), [conn.user + '@' + conn.host])
     let r = await this.spawnOnce([SSH].concat(base, remoteArgv), stdinData, opts.graceMs || 60000, opts.timeoutMs, opts.binary)
     if (r.exit === 255 || r.err.includes('Control socket connect')) {
-      await this.ensureMaster(conn)
+      const master = await this.ensureMaster(conn)
+      if (master.exit !== 0) return master
       r = await this.spawnOnce([SSH].concat(base, remoteArgv), stdinData, opts.graceMs || 60000, opts.timeoutMs, opts.binary)
     }
     return r
@@ -563,10 +612,17 @@ export function apply(ctx, config) {
   } catch {
     store = Object.assign({}, emptyStore)
   }
+  try {
+    validateStoreInput(store.connections, store.active, store.testTarget)
+  } catch {
+    store = Object.assign({}, emptyStore)
+  }
   function saveStore() {
     try {
+      mkdirSync(dirname(storePath), { recursive: true, mode: 0o700 })
       const tmp = storePath + '.tmp'
-      writeFileSync(tmp, JSON.stringify(store, null, 2))
+      writeFileSync(tmp, JSON.stringify(store, null, 2), { mode: 0o600 })
+      chmodSync(tmp, 0o600)
       renameSync(tmp, storePath)
     } catch (e) {
       console.error('[dsh-remote-vps] save store failed:', e)
@@ -617,6 +673,17 @@ export function apply(ctx, config) {
       }
       const addr = req.socket ? String(req.socket.remoteAddress || '') : ''
       if (addr !== '127.0.0.1' && addr !== '::1' && addr !== '::ffff:127.0.0.1') return send(403, { ok: false, message: 'loopback uniquement' })
+      const host = String(req.headers?.host || '')
+      if (host) {
+        try {
+          if (!isLoopbackHostname(new URL('http://' + host).hostname)) return send(403, { ok: false, message: 'hôte local uniquement' })
+        } catch {
+          return send(400, { ok: false, message: 'en-tête Host invalide' })
+        }
+      }
+      const origin = req.headers?.origin || req.headers?.Origin
+      if (origin && !isLocalOrigin(String(origin))) return send(403, { ok: false, message: 'origine locale uniquement' })
+      if (String(req.headers?.['sec-fetch-site'] || '').toLowerCase() === 'cross-site') return send(403, { ok: false, message: 'requête cross-site refusée' })
       const url = new URL(req.url, 'http://localhost')
       if (url.pathname === '/dsh-remote-vps/state') {
         if (req.method === 'GET') {
@@ -624,7 +691,12 @@ export function apply(ctx, config) {
         }
         if (req.method === 'POST') {
           let body = ''
-          for await (const chunk of req) body += chunk
+          let bodyBytes = 0
+          for await (const chunk of req) {
+            bodyBytes += Buffer.byteLength(chunk)
+            if (bodyBytes > MAX_STATE_BODY_BYTES) return send(413, { ok: false, message: 'corps trop volumineux' })
+            body += chunk
+          }
           try {
             const input = JSON.parse(body)
             const conns = (Array.isArray(input.connections) ? input.connections : []).map((c) => SCHEMA_CONNECTION(c))
@@ -634,6 +706,7 @@ export function apply(ctx, config) {
               testRequest: 0,
               testTarget: typeof input.testTarget === 'string' ? input.testTarget : '',
             })
+            validateStoreInput(validated.connections, validated.active, validated.testTarget)
             store.connections = validated.connections
             store.active = validated.active
             store.testTarget = validated.testTarget

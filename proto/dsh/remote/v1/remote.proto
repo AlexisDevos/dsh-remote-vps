@@ -3,10 +3,18 @@ syntax = "proto3";
 package dsh.remote.v1;
 
 // Stable wire contract between the local controller and a VPS agent.
-// File and command RPCs are added only through backward-compatible changes.
+// New fields and RPCs must remain backward-compatible.
 service RemoteAgent {
   rpc GetCapabilities(GetCapabilitiesRequest) returns (CapabilitiesResponse);
   rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Stat(StatRequest) returns (StatResponse);
+  rpc Read(ReadRequest) returns (stream ReadChunk);
+  rpc List(ListRequest) returns (stream DirEntry);
+  rpc Write(stream WriteFrame) returns (WriteResponse);
+  rpc Edit(EditRequest) returns (EditResponse);
+  rpc Glob(GlobRequest) returns (stream GlobMatch);
+  rpc Grep(GrepRequest) returns (stream GrepMatch);
+  rpc Exec(ExecRequest) returns (stream ExecChunk);
 }
 
 message GetCapabilitiesRequest {
@@ -27,4 +35,156 @@ message HealthResponse {
   string status = 1;
   string agent_version = 2;
   string protocol_version = 3;
+}
+
+message StatRequest {
+  string request_id = 1;
+  string root_id = 2;
+  string path = 3;
+}
+
+message StatResponse {
+  NodeType type = 1;
+  uint64 size = 2;
+  string version = 3;
+}
+
+message ReadRequest {
+  string request_id = 1;
+  string root_id = 2;
+  string path = 3;
+  uint64 max_bytes = 4;
+}
+
+message ReadChunk {
+  bytes data = 1;
+  uint64 offset = 2;
+  uint64 total_size = 3;
+  string version = 4;
+  bool eof = 5;
+}
+
+message ListRequest {
+  string request_id = 1;
+  string root_id = 2;
+  string path = 3;
+  uint32 max_entries = 4;
+}
+
+message DirEntry {
+  string name = 1;
+  NodeType type = 2;
+  uint64 size = 3;
+  string version = 4;
+}
+
+enum NodeType {
+  NODE_TYPE_UNSPECIFIED = 0;
+  NODE_TYPE_FILE = 1;
+  NODE_TYPE_DIRECTORY = 2;
+  NODE_TYPE_SYMLINK = 3;
+  NODE_TYPE_OTHER = 4;
+}
+
+enum WriteMode {
+  WRITE_MODE_UNSPECIFIED = 0;
+  WRITE_MODE_CREATE_IF_ABSENT = 1;
+  WRITE_MODE_REPLACE_IF_VERSION = 2;
+  WRITE_MODE_REPLACE_ANY = 3;
+}
+
+message WriteStart {
+  string request_id = 1;
+  string root_id = 2;
+  string path = 3;
+  WriteMode mode = 4;
+  string expected_version = 5;
+  uint64 declared_size = 6;
+}
+
+message WriteFrame {
+  oneof payload {
+    WriteStart start = 1;
+    bytes data = 2;
+  }
+}
+
+message WriteResponse {
+  string operation = 1;
+  string version = 2;
+  uint64 size = 3;
+}
+
+message EditRequest {
+  string request_id = 1;
+  string root_id = 2;
+  string path = 3;
+  string old_string = 4;
+  string new_string = 5;
+  bool replace_all = 6;
+  string expected_version = 7;
+}
+
+message EditResponse {
+  string version = 1;
+  string before = 2;
+  string after = 3;
+}
+
+message GlobRequest {
+  string request_id = 1;
+  string root_id = 2;
+  string base_path = 3;
+  string pattern = 4;
+  uint32 max_results = 5;
+  bool include_hidden = 6;
+}
+
+message GlobMatch {
+  string path = 1;
+  NodeType type = 2;
+  uint64 size = 3;
+  string version = 4;
+}
+
+message GrepRequest {
+  string request_id = 1;
+  string root_id = 2;
+  string base_path = 3;
+  string pattern = 4;
+  uint32 max_results = 5;
+  uint64 max_file_bytes = 6;
+  bool case_sensitive = 7;
+  bool include_hidden = 8;
+}
+
+message GrepMatch {
+  string path = 1;
+  uint64 line = 2;
+  uint64 column = 3;
+  string text = 4;
+}
+
+message ExecRequest {
+  string request_id = 1;
+  string root_id = 2;
+  string cwd = 3;
+  repeated string argv = 4;
+  uint64 timeout_ms = 5;
+  uint64 max_output_bytes = 6;
+}
+
+message ExecChunk {
+  oneof payload {
+    bytes stdout = 1;
+    bytes stderr = 2;
+    ExecExit exit = 3;
+  }
+}
+
+message ExecExit {
+  int32 exit_code = 1;
+  int32 signal = 2;
+  bool timed_out = 3;
+  bool truncated = 4;
 }

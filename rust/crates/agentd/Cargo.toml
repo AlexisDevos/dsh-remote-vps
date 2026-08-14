@@ -1,6 +1,6 @@
 [package]
 name = "dsh-agentd"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 description = "Rust VPS daemon for dsh-remote-vps"
@@ -9,7 +9,14 @@ description = "Rust VPS daemon for dsh-remote-vps"
 anyhow = "1.0.98"
 clap = { version = "4.5.40", features = ["derive"] }
 dsh-protocol = { path = "../protocol" }
-tokio = { version = "1.45.1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+dsh-core = { path = "../core" }
+libc = "0.2.189"
+globset = "0.4.16"
+regex = "1.11.1"
+tempfile = "3.27.0"
+tokio = { version = "1.45.1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "time"] }
+tokio-stream = { version = "0.1.19", features = ["net", "sync"] }
 tonic = { version = "0.12.3", features = ["transport"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+walkdir = "2.5.0"

@@ -1,0 +1,35 @@
+[Unit]
+Description=dsh-remote-vps Rust agent
+Documentation=https://github.com/AlexisDevos/dsh-remote-vps
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dsh-agent
+Group=dsh-agent
+WorkingDirectory=@ROOT@
+ExecStart=@PREFIX@/current/dsh-agentd serve --listen 127.0.0.1:@PORT@ --root project=@ROOT@@ALLOW_EXEC@ --auth-token-file /var/lib/dsh-agent/auth.token
+Restart=on-failure
+RestartSec=3s
+
+# The agent is intentionally reachable only through loopback and an SSH tunnel.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=@ROOT@ /var/lib/dsh-agent
+
+[Install]
+WantedBy=multi-user.target

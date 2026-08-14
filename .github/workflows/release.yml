@@ -1,0 +1,74 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - name: macos-x86_64
+            os: macos-13
+            target: x86_64-apple-darwin
+          - name: macos-aarch64
+            os: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Stage release
+        run: |
+          set -euo pipefail
+          rm -rf stage
+          mkdir stage
+          install -m 0755 target/${{ matrix.target }}/release/dsh-agentd stage/dsh-agentd
+          install -m 0755 target/${{ matrix.target }}/release/dsh-controller stage/dsh-controller
+          install -m 0644 README.md stage/README.md
+          install -m 0644 LICENSE stage/LICENSE
+          install -m 0644 packaging/systemd/dsh-agentd.service.in stage/dsh-agentd.service.in
+          tar -czf dsh-remote-vps-${{ matrix.name }}.tar.gz -C stage .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-remote-vps-${{ matrix.name }}
+          path: dsh-remote-vps-${{ matrix.name }}.tar.gz
+
+  publish:
+    name: Publish GitHub release
+    needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: dsh-remote-vps-*
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum dsh-remote-vps-*.tar.gz > SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "dsh-remote-vps $GITHUB_REF_NAME" \
+            --generate-notes

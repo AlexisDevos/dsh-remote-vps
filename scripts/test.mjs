@@ -65,7 +65,7 @@ writeFileSync(p('e/target.txt'), 'symlink target\n')
 symlinkSync(p('e/target.txt'), p('e/link.txt'))
 
 const hasRg = spawnSync('rg', ['--version']).status === 0
-const hasFindPrintf = spawnSync('bash', ['-c', "find . -maxdepth 0 -printf '%y' 2>/dev/null || true"]).stdout.includes('f')
+const hasFindPrintf = spawnSync('find', [p('r/t.txt'), '-maxdepth', '0', '-printf', '%y']).stdout.includes('f')
 const bsdBase64 = String(spawnSync('bash', ['-c', "printf hi > /tmp/.b64probe 2>/dev/null; base64 -i /tmp/.b64probe >/dev/null 2>&1; echo $?"]).stdout || '').trim() === '0'
 
 console.log('write — création avec création de répertoire parent')

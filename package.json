@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-vps",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Outils fichiers distants pour DeepSeek Harness : read/write/edit/glob/grep/bash sur des VPS via SSH (Tailscale), connexions multiples g\u00e9rables dans Settings. Aucune valeur personnelle embarqu\u00e9e.",
   "type": "module",
   "scripts": {
