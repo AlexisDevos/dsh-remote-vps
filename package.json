@@ -22,7 +22,9 @@
     "scripts/test.mjs",
     "scripts/test-client.mjs",
     "scripts/bench.mjs",
-    "README.md"
+    "README.md",
+    "README.zh.md",
+    "README.fr.md"
   ],
   "license": "MIT",
   "keywords": [

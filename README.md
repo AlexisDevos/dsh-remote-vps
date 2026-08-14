@@ -1,34 +1,36 @@
 # dsh-remote-vps
 
-Des outils fichiers **distants** pour [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) : `read`, `write`, `edit`, `read_image`, `glob`, `grep` et `bash` pilotant **vos propres VPS** via SSH (recommandé : Tailscale), sans rien installer sur les serveurs.
+English | [中文](README.zh.md) | [Français](README.fr.md)
+
+Remote filesystem tools for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): `read`, `write`, `edit`, `read_image`, `glob`, `grep` and `bash` driving **your own VPS** over SSH (Tailscale recommended), with nothing to install on the servers.
 
 ```
-[ Votre machine : DSH + ce package ] ── SSH multiplexé (ControlMaster) ──► [ VPS : rien à installer ]
+[ Your machine: DSH + this package ] ── multiplexed SSH (ControlMaster) ──► [ VPS: nothing to install ]
 ```
 
-Aucune valeur personnelle n'est embarquée : chaque utilisateur configure ses serveurs dans **Settings → « VPS distants »**.
+No personal values are baked in: every user configures their own servers in **Settings → "VPS distants"**.
 
-## Fonctionnalités
+## Features
 
-- **Outils fichiers complets** : `read`/`write`/`edit`/`read_image` gardent la sémantique native de DSH (numéros de ligne, écritures atomiques, gardes de version, erreurs typées) mais s'exécutent sur le VPS.
-- **Recherche et shell distants** : `glob`/`grep` (ripgrep) et `bash` (shell du VPS, avec node le plus récent via nvm si présent).
-- **Section Settings « VPS distants »** : ajouter/éditer/supprimer des connexions, activer une connexion, tester (badge OK + latence), copier la commande SSH, heure de dernière vérification.
-- **Connexions multiples** : une connexion active parmi plusieurs, chacune avec son `baseDir` (répertoire de travail distant).
-- **Zéro installation sur le VPS** : seuls `sshd`, `python3` et `ripgrep` (déjà présents sur la plupart des serveurs) sont utilisés à distance.
-- **Robuste** : écritures atomiques (temp + rename), versionnage (`mtime ns:size`), symlinks préservés, fins de ligne CRLF préservées, mapping d'erreurs typé (`FS_PERMISSION_DENIED`, `FS_STALE_VERSION`, …).
+- **Full file tools**: `read`/`write`/`edit`/`read_image` keep DSH's native semantics (line numbers, atomic writes, version guards, typed errors) but run on the VPS.
+- **Remote search and shell**: `glob`/`grep` (ripgrep) and `bash` (VPS shell, with the latest node via nvm when available).
+- **Settings section "VPS distants"**: add/edit/delete connections, activate one, test (OK badge + latency), copy the SSH command, last-check time.
+- **Multiple connections**: one active connection among several, each with its own `baseDir` (remote working directory).
+- **Zero installation on the VPS**: only `sshd`, `python3` and `ripgrep` (already present on most servers) are used remotely.
+- **Robust**: atomic writes (temp + rename), versioning (`mtime ns:size`), symlinks preserved, CRLF line endings preserved, typed error mapping (`FS_PERMISSION_DENIED`, `FS_STALE_VERSION`, …).
 
 ## Installation
 
-### 1. Installer le package dans le profil web
+### 1. Install the package into the web profile
 
 ```bash
 mkdir -p ~/.dsh/profiles/web/node_modules
 cp -R dsh-remote-vps ~/.dsh/profiles/web/node_modules/dsh-remote-vps
 ```
 
-### 2. Déclarer la rangée racine dans le patch du profil
+### 2. Declare the root row in the profile patch
 
-Éditer `~/.dsh/profiles/web/cordis.patch.yml` :
+Edit `~/.dsh/profiles/web/cordis.patch.yml`:
 
 ```yaml
 - insert:
@@ -36,11 +38,11 @@ cp -R dsh-remote-vps ~/.dsh/profiles/web/node_modules/dsh-remote-vps
       name: 'dsh-remote-vps'
 ```
 
-Cette rangée monte le plugin racine (pool SSH, store persistant, pont HTTP local, outils `glob`/`grep`/`bash`, health-checker). Elle ne fournit **pas** le service `fs` : le filesystem local de DSH reste intact pour tous les autres modes.
+This row mounts the root plugin (SSH pool, persistent store, local HTTP bridge, `glob`/`grep`/`bash` tools, health checker). It does **not** provide the `fs` service: DSH's local filesystem stays intact for every other mode.
 
-### 3. Créer un preset qui monte le filesystem distant
+### 3. Create a preset that mounts the remote filesystem
 
-Copier le preset `standard` (via l'interface ou `~/.dsh/.agent-presets/`), retirer les rangées `tool-fs`, `tool-fs-search` et `tool-bash`, puis ajouter ce groupe :
+Copy the `standard` preset (through the UI or `~/.dsh/.agent-presets/`), remove the `tool-fs`, `tool-fs-search` and `tool-bash` rows, then add this group:
 
 ```yaml
 - id: remote
@@ -50,7 +52,7 @@ Copier le preset `standard` (via l'interface ou `~/.dsh/.agent-presets/`), retir
     fs: true
   config:
     - id: dsh-remote-vps-fs
-      name: /chemin/absolu/vers/dsh-remote-vps/src/fs.js
+      name: /absolute/path/to/dsh-remote-vps/src/fs.js
 
     - id: tool-fs
       name: '@deepseek-ai/dsh-tool-fs'
@@ -59,79 +61,79 @@ Copier le preset `standard` (via l'interface ou `~/.dsh/.agent-presets/`), retir
       name: '@deepseek-ai/dsh-fs-observation-policy'
 ```
 
-> Le `fs` distant vit dans un realm isolé propre à chaque session du preset : les modes `standard`/`cordis`/`minimal` gardent leur filesystem local sandboxé.
+> The remote `fs` lives in an isolate realm private to each session of the preset: the `standard`/`cordis`/`minimal` modes keep their sandboxed local filesystem.
 
-### 4. Redémarrer et configurer
+### 4. Restart and configure
 
 ```bash
 npx @deepseek-ai/dsh web
 ```
 
-Puis : **Settings → « VPS distants » → « + Ajouter un VPS »** avec :
+Then: **Settings → "VPS distants" → "+ Add a VPS"** with:
 
-| Champ | Exemple | Obligatoire |
+| Field | Example | Required |
 |---|---|---|
-| Nom | `Mon VPS` | non |
-| Hôte | `mon-vps` (MagicDNS Tailscale) ou `100.x.y.z` | **oui** |
-| Utilisateur | `root` | non (défaut `root`) |
-| Port | `22` | non |
-| Clé SSH | `~/.ssh/id_ed25519` | non |
-| baseDir | `/srv/app` | non |
+| Name | `My VPS` | no |
+| Host | `my-vps` (Tailscale MagicDNS) or `100.x.y.z` | **yes** |
+| User | `root` | no (default `root`) |
+| Port | `22` | no |
+| SSH key | `~/.ssh/id_ed25519` | no |
+| baseDir | `/srv/app` | no |
 
-Les connexions sont persistées dans `~/.dsh/dsh-remote-vps.json`. Le bouton **Tester** affiche la latence mesurée.
+Connections persist in `~/.dsh/dsh-remote-vps.json`. The **Test** button shows the measured latency.
 
-## Utilisation
+## Usage
 
-Une fois le preset actif, les outils travaillent sur le VPS :
+Once the preset is active, the tools work on the VPS:
 
-- `read /home/user/app/README.md` — lecture distante avec numéros de ligne ;
-- `write` / `edit` — écritures atomiques distantes (gardes de version) ;
-- `glob "*.ts"` / `grep "workerAdapter"` — ripgrep distant (hors `node_modules`/`.git`/`.next`/`dist`) ;
-- `bash` — shell du VPS (workdir = `baseDir` par défaut).
+- `read /home/user/app/README.md` — remote read with line numbers;
+- `write` / `edit` — atomic remote writes (version guards);
+- `glob "*.ts"` / `grep "workerAdapter"` — remote ripgrep (excluding `node_modules`/`.git`/`.next`/`dist`);
+- `bash` — VPS shell (workdir = `baseDir` by default).
 
-Sans connexion configurée, les outils répondent par une erreur explicite.
+With no connection configured, the tools answer with an explicit error.
 
 ## Architecture
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `src/index.js` (export `.`) | Plugin **racine** : pool SSH multiplexé (ControlMaster), store JSON `~/.dsh/dsh-remote-vps.json`, pont HTTP local `GET/POST /dsh-remote-vps/state` (loopback strict), health-checker, outils `glob`/`grep`/`bash`. **Ne fournit pas `fs`.** |
-| `src/fs.js` (export `./fs`) | Classe `RemoteFileSystem` (service `fs`) — à monter dans un preset, groupe `isolate: { fs: true }`, à côté de `@deepseek-ai/dsh-tool-fs` et `@deepseek-ai/dsh-fs-observation-policy`. |
-| `lib/client.js` (export `./client`) | Bundle navigateur : section Settings « VPS distants » (déclaration `dsh.client` dans `package.json`). |
-| `scripts/` | Tests et benchmark. |
+| `src/index.js` (export `.`) | **Root** plugin: multiplexed SSH pool (ControlMaster), JSON store `~/.dsh/dsh-remote-vps.json`, local HTTP bridge `GET/POST /dsh-remote-vps/state` (strict loopback), health checker, `glob`/`grep`/`bash` tools. **Does not provide `fs`.** |
+| `src/fs.js` (export `./fs`) | `RemoteFileSystem` class (the `fs` service) — mount it in a preset, `isolate: { fs: true }` group, beside `@deepseek-ai/dsh-tool-fs` and `@deepseek-ai/dsh-fs-observation-policy`. |
+| `lib/client.js` (export `./client`) | Browser bundle: the "VPS distants" Settings section (`dsh.client` declaration in `package.json`). |
+| `scripts/` | Tests and benchmark. |
 
-### Pourquoi un pont HTTP plutôt que `ctx.settings` ?
+### Why an HTTP bridge instead of `ctx.settings`?
 
-Le canal de réglages de DSH (`settings.describe`/`settings.mutate`) n'expose aux clients navigateur qu'une **liste blanche fixe** de namespaces ; un package tiers ne peut pas s'y inscrire dans cette version du harness. Le pont local `/dsh-remote-vps/state` (loopback uniquement, validation par schéma côté hôte) contourne ce verrou **sans modifier aucun fichier livré**.
+DSH's settings channel (`settings.describe`/`settings.mutate`) only exposes a **fixed allowlist** of namespaces to browser clients; a third-party package cannot register itself there in this harness version. The local `/dsh-remote-vps/state` bridge (loopback only, host-side schema validation) bypasses that lock **without modifying any shipped file**.
 
-## Sécurité
+## Security
 
-- Aucun port ouvert : SSH sortant multiplexé, authentification par vos clés existantes.
-- Le pont HTTP n'accepte que les requêtes loopback (`127.0.0.1`/`::1`).
-- `StrictHostKeyChecking=accept-new` : premier contact de confiance (modèle TOFU du client SSH classique).
-- Aucune clé API stockée : le package n'utilise que SSH.
-- En Tailscale, l'IP publique du VPS peut rester fermée au SSH : tout passe par le tailnet.
+- No open port: outgoing multiplexed SSH, authentication with your existing keys.
+- The HTTP bridge only accepts loopback requests (`127.0.0.1`/`::1`).
+- `StrictHostKeyChecking=accept-new`: first-contact trust (the classic SSH client TOFU model).
+- No API key stored: the package only uses SSH.
+- With Tailscale, the VPS's public IP can stay closed to SSH: everything goes through the tailnet.
 
 ## Tests
 
 ```bash
-npm test            # glue backend : write/edit (gardes, symlinks, CRLF, permissions) + commandes coreutils — 22 scénarios
-npm run test:client # bundle client : chargement + enregistrement de la section Settings
-npm run bench       # latence médiane des opérations contre la connexion active du store
+npm test            # backend glue: write/edit (guards, symlinks, CRLF, permissions) + coreutils commands — 22 scenarios
+npm run test:client # client bundle: loading + Settings section registration
+npm run bench       # median latency of the operations against the active store connection
 ```
 
-Les tests s'exécutent en local via le transport injectable du pool (aucun VPS requis). Les commandes GNU-only (`find -printf`, `base64 -w0`) sont sautées sur macOS BSD et restent validées en live sur un VPS Ubuntu.
+Tests run locally through the pool's injectable transport (no VPS required). GNU-only commands (`find -printf`, `base64 -w0`) are skipped on macOS BSD and remain validated live on an Ubuntu VPS.
 
-## Dépannage
+## Troubleshooting
 
-| Symptôme | Cause probable |
+| Symptom | Likely cause |
 |---|---|
-| « Pont local injoignable » en rouge dans la section | Le serveur DSH n'a pas été redémarré après l'installation, ou le patch `cordis.patch.yml` est invalide |
-| « Écriture refusée : … » | Le message précise le champ en erreur (hôte obligatoire, doublon host:port, port non numérique) |
-| Section absente dans Settings | Recharger la page en forçant (Cmd+Shift+R) après redémarrage de DSH |
-| Outils : « aucune connexion VPS configurée » | Ajouter une connexion dans Settings → « VPS distants » |
-| Badge « Échec » au test | Vérifier la clé d'hôte (`ssh-keyscan`), la clé SSH et la portée Tailscale |
+| "Pont local injoignable" shown in red in the section | The DSH server was not restarted after installation, or `cordis.patch.yml` is invalid |
+| "Écriture refusée: …" | The message names the failing field (missing host, duplicate host:port, non-numeric port) |
+| Section missing in Settings | Force-reload the page (Cmd+Shift+R) after restarting DSH |
+| Tools: "aucune connexion VPS configurée" | Add a connection in Settings → "VPS distants" |
+| "Échec" badge on test | Check the host key (`ssh-keyscan`), the SSH key, and the Tailscale scope |
 
-## Licence
+## License
 
 MIT
