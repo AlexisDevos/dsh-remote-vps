@@ -1,0 +1,52 @@
+{
+  "name": "dsh-remote-vps",
+  "version": "0.2.0",
+  "description": "Outils fichiers distants pour DeepSeek Harness : read/write/edit/glob/grep/bash sur des VPS via SSH (Tailscale), connexions multiples g\u00e9rables dans Settings. Aucune valeur personnelle embarqu\u00e9e.",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/test.mjs",
+    "test:client": "node scripts/test-client.mjs",
+    "bench": "node scripts/bench.mjs"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./fs": "./src/fs.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/index.js",
+    "src/fs.js",
+    "lib/client.js",
+    "scripts/test.mjs",
+    "scripts/test-client.mjs",
+    "scripts/bench.mjs",
+    "README.md"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "ssh",
+    "vps",
+    "tailscale",
+    "filesystem",
+    "remote-files",
+    "cordis"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/schemastery": "*",
+    "@deepseek-ai/dsh-fs": "*",
+    "@deepseek-ai/dsh-settings": "*",
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [],
+      "immediately": true
+    }
+  }
+}
