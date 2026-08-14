@@ -48,5 +48,13 @@
       "inject": [],
       "immediately": true
     }
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexisDevos/dsh-remote-vps.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AlexisDevos/dsh-remote-vps/issues"
+  },
+  "homepage": "https://github.com/AlexisDevos/dsh-remote-vps#readme"
 }
